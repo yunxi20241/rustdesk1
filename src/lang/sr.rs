@@ -364,6 +364,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Recording", "Snimanje"),
         ("Directory", "Direktorijum"),
         ("Automatically record incoming sessions", "Automatski snimaj dolazne sesije"),
+        ("Automatically record outgoing sessions", ""),
         ("Change", "Promeni"),
         ("Start session recording", "Započni snimanje sesije"),
         ("Stop session recording", "Zaustavi snimanje sesije"),
@@ -647,5 +648,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("one-way-file-transfer-tip", ""),
         ("Authentication Required", ""),
         ("Authenticate", ""),
+        ("web_id_input_tip", ""),
+        ("Download", ""),
+        ("Upload folder", ""),
+        ("Upload files", ""),
+        ("Clipboard is synchronized", ""),
     ].iter().cloned().collect();
 }
