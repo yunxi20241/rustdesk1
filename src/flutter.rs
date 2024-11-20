@@ -1126,6 +1126,7 @@ pub fn session_add(
     force_relay: bool,
     password: String,
     is_shared_password: bool,
+    conn_token: Option<String>,
 ) -> ResultType<FlutterSession> {
     let conn_type = if is_file_transfer {
         ConnType::FILE_TRANSFER
@@ -1180,6 +1181,7 @@ pub fn session_add(
         force_relay,
         get_adapter_luid(),
         shared_password,
+        conn_token,
     );
 
     let session = Arc::new(session.clone());
@@ -1248,15 +1250,17 @@ fn try_send_close_event(event_stream: &Option<StreamSink<EventToUI>>) {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn update_text_clipboard_required() {
     let is_required = sessions::get_sessions()
         .iter()
         .any(|s| s.is_text_clipboard_required());
+    #[cfg(target_os = "android")]
+    let _ = scrap::android::ffi::call_clipboard_manager_enable_client_clipboard(is_required);
     Client::set_is_text_clipboard_required(is_required);
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn send_text_clipboard_msg(msg: Message) {
     for s in sessions::get_sessions() {
         if s.is_text_clipboard_required() {
@@ -2049,7 +2053,7 @@ pub mod sessions {
     }
 
     #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     pub fn has_sessions_running(conn_type: ConnType) -> bool {
         SESSIONS.read().unwrap().iter().any(|((_, r#type), s)| {
             *r#type == conn_type && s.session_handlers.read().unwrap().len() != 0

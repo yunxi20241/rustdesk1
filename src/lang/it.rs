@@ -130,7 +130,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show quality monitor", "Visualizza qualità video"),
         ("Disable clipboard", "Disabilita appunti"),
         ("Lock after session end", "Blocca al termine della sessione"),
-        ("Insert", "Inserisci"),
+        ("Insert Ctrl + Alt + Del", "Inserisci Ctrl + Alt + Del"),
         ("Insert Lock", "Blocco inserimento"),
         ("Refresh", "Aggiorna"),
         ("ID does not exist", "L'ID non esiste"),
@@ -363,8 +363,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Unpin Toolbar", "Sblocca barra strumenti"),
         ("Recording", "Registrazione"),
         ("Directory", "Cartella"),
-        ("Automatically record incoming sessions", "Registra automaticamente le sessioni in entrata"),
-        ("Automatically record outgoing sessions", ""),
+        ("Automatically record incoming sessions", "Registra automaticamente sessioni in entrata"),
+        ("Automatically record outgoing sessions", "Registra automaticamente sessioni in uscita"),
         ("Change", "Modifica"),
         ("Start session recording", "Inizia registrazione sessione"),
         ("Stop session recording", "Ferma registrazione sessione"),
@@ -653,5 +653,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Upload folder", "Cartella upload"),
         ("Upload files", "File upload"),
         ("Clipboard is synchronized", "Gli appunti sono sincronizzati"),
+        ("Update client clipboard", "Aggiorna appunti client"),
     ].iter().cloned().collect();
 }

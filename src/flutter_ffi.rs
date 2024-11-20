@@ -121,6 +121,7 @@ pub fn session_add_sync(
     force_relay: bool,
     password: String,
     is_shared_password: bool,
+    conn_token: Option<String>,
 ) -> SyncReturn<String> {
     if let Err(e) = session_add(
         &session_id,
@@ -132,6 +133,7 @@ pub fn session_add_sync(
         force_relay,
         password,
         is_shared_password,
+        conn_token,
     ) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -222,6 +224,10 @@ pub fn session_get_enable_trusted_devices(session_id: SessionID) -> SyncReturn<b
 
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
+        // `release_remote_keys` is not required for mobile platforms in common cases.
+        // But we still call it to make the code more stable.
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        crate::keyboard::release_remote_keys("map");
         session.close_event_stream(session_id);
         session.close();
     }
@@ -268,7 +274,7 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
         session.toggle_option(value.clone());
         try_sync_peer_option(&session, &session_id, &value, None);
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     if sessions::get_session_by_session_id(&session_id).is_some() && value == "disable-clipboard" {
         crate::flutter::update_text_clipboard_required();
     }
@@ -811,6 +817,17 @@ pub fn main_show_option(_key: String) -> SyncReturn<bool> {
     SyncReturn(false)
 }
 
+#[inline]
+#[cfg(target_os = "android")]
+fn enable_server_clipboard(keyboard_enabled: &str, clip_enabled: &str) {
+    use scrap::android::ffi::call_clipboard_manager_enable_service_clipboard;
+    let keyboard_enabled =
+        config::option2bool(config::keys::OPTION_ENABLE_KEYBOARD, &keyboard_enabled);
+    let clip_enabled = config::option2bool(config::keys::OPTION_ENABLE_CLIPBOARD, &clip_enabled);
+    crate::ui_cm_interface::switch_permission_all("clipboard".to_owned(), clip_enabled);
+    let _ = call_clipboard_manager_enable_service_clipboard(keyboard_enabled && clip_enabled);
+}
+
 pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
     if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
@@ -818,6 +835,11 @@ pub fn main_set_option(key: String, value: String) {
             config::keys::OPTION_ENABLE_KEYBOARD,
             &value,
         ));
+        enable_server_clipboard(&value, &get_option(config::keys::OPTION_ENABLE_CLIPBOARD));
+    }
+    #[cfg(target_os = "android")]
+    if key.eq(config::keys::OPTION_ENABLE_CLIPBOARD) {
+        enable_server_clipboard(&get_option(config::keys::OPTION_ENABLE_KEYBOARD), &value);
     }
     if key.eq("custom-rendezvous-server") {
         set_option(key, value.clone());
@@ -1334,6 +1356,14 @@ pub fn session_request_voice_call(session_id: SessionID) {
 pub fn session_close_voice_call(session_id: SessionID) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.close_voice_call();
+    }
+}
+
+pub fn session_get_conn_token(session_id: SessionID) -> SyncReturn<Option<String>> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        SyncReturn(session.get_conn_token())
+    } else {
+        SyncReturn(None)
     }
 }
 
