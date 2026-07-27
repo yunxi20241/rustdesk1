@@ -10,7 +10,8 @@ use std::io;
 
 use crate::{
     client::{
-        SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED, SCRAP_X11_REQUIRED,
+        SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED,
+        SCRAP_X11_REQUIRED, SCRAP_XDP_PORTAL_UNAVAILABLE,
     },
     platform::linux::is_x11,
 };
@@ -56,10 +57,15 @@ fn map_err_scrap(err: String) -> io::Error {
         }
     } else {
         try_log(&err);
-        if err.contains("org.freedesktop.portal")
-            || err.contains("pipewire")
-            || err.contains("dbus")
+        let err_lower = err.to_ascii_lowercase();
+        if err_lower.contains("org.freedesktop.portal")
+            || err_lower.contains("dbus")
+            || err_lower.contains("d-bus")
         {
+            // The portal D-Bus interface is unreachable. This typically means
+            // xdg-desktop-portal has crashed... for more info, see: Issue #12897
+            io::Error::new(io::ErrorKind::Other, SCRAP_XDP_PORTAL_UNAVAILABLE)
+        } else if err_lower.contains("pipewire") {
             io::Error::new(io::ErrorKind::Other, SCRAP_OTHER_VERSION_OR_X11_REQUIRED)
         } else {
             io::Error::new(io::ErrorKind::Other, SCRAP_X11_REQUIRED)
@@ -131,6 +137,9 @@ pub(super) async fn check_init() -> ResultType<()> {
     if !is_x11() {
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             if crate::input_service::wayland_use_uinput() {
+                // The cached layout may predate compositor changes made while no session
+                // was active, https://github.com/rustdesk/rustdesk/issues/15601
+                scrap::wayland::display::clear_wayland_displays_cache();
                 if let Some((minx, maxx, miny, maxy)) =
                     scrap::wayland::display::get_desktop_rect_for_uinput()
                 {
@@ -141,9 +150,28 @@ pub(super) async fn check_init() -> ResultType<()> {
                         miny,
                         maxy
                     );
-                    allow_err!(
-                        input_service::update_mouse_resolution(minx, maxx, miny, maxy).await
-                    );
+                    // Bound the IPC wait like the periodic refresh does, so a hung
+                    // response can't stall session init.
+                    match timeout(
+                        3_000,
+                        input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {
+                            super::display_service::set_wayland_uinput_rect((
+                                minx, maxx, miny, maxy,
+                            ));
+                            // Snapshot the per-display layout the client's coordinates
+                            // will be based on, so the mouse path can correct them if
+                            // the compositor moves a monitor mid-session.
+                            super::display_service::set_wayland_layout_baseline(
+                                scrap::wayland::display::get_display_rects_for_uinput(),
+                            );
+                        }
+                        Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                        Err(err) => log::error!("Failed to update mouse resolution: {}", err),
+                    }
                 } else {
                     log::warn!("Failed to get desktop rect for uinput");
                 }
@@ -169,8 +197,7 @@ pub(super) async fn check_init() -> ResultType<()> {
                 *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
-                super::display_service::check_update_displays(&all);
-                let mut displays = super::display_service::get_sync_displays();
+                let mut displays = super::display_service::update_sync_displays(&all);
                 for display in displays.iter_mut() {
                     display.cursor_embedded = is_cursor_embedded();
                 }
@@ -214,27 +241,15 @@ pub(super) async fn check_init() -> ResultType<()> {
     Ok(())
 }
 
-pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
+pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
     check_init().await?;
+    // Keep one read guard so clear/reinitialization cannot split these across cache snapshots.
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.values().next() {
         let cap_display_info: *const CapDisplayInfo = *addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
-            Ok(cap_display_info.displays.clone())
-        }
-    } else {
-        bail!("Failed to get capturer display info");
-    }
-}
-
-pub(super) fn get_primary() -> ResultType<usize> {
-    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(addr) = cap_map.values().next() {
-        let cap_display_info: *const CapDisplayInfo = *addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            Ok(cap_display_info.primary)
+            Ok((cap_display_info.displays.clone(), cap_display_info.primary))
         }
     } else {
         bail!("Failed to get capturer display info");
