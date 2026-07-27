@@ -79,16 +79,19 @@ pub fn restart() {
 mod pa_impl {
     use super::*;
 
-    // SAFETY: constrains of hbb_common::mem::aligned_u8_vec must be held
-    unsafe fn align_to_32(data: Vec<u8>) -> Vec<u8> {
-        if (data.as_ptr() as usize & 3) == 0 {
-            return data;
-        }
+    fn with_aligned_f32(data: &[u8], f: impl FnOnce(&[f32])) {
+        let mut aligned;
+        let data = if (data.as_ptr() as usize & 3) == 0 {
+            data
+        } else {
+            aligned = hbb_common::mem::aligned_u8_vec(data.len(), 4);
+            aligned.extend_from_slice(data);
+            &aligned
+        };
 
-        let mut buf = vec![];
-        buf = unsafe { hbb_common::mem::aligned_u8_vec(data.len(), 4) };
-        buf.extend_from_slice(data.as_ref());
-        buf
+        // SAFETY: `data` is 4-byte aligned above, and audio buffers contain
+        // complete f32 samples.
+        f(unsafe { std::slice::from_raw_parts(data.as_ptr() as _, data.len() / 4) });
     }
 
     #[tokio::main(flavor = "current_thread")]
@@ -131,23 +134,14 @@ mod pa_impl {
                     continue;
                 }
 
-                let data = unsafe { align_to_32(data.into()) };
-                let data = unsafe {
-                    std::slice::from_raw_parts::<f32>(data.as_ptr() as _, data.len() / 4)
-                };
-                send_f32(data, &mut encoder, &sp);
+                with_aligned_f32(&data, |data| send_f32(data, &mut encoder, &sp));
             }
 
             #[cfg(target_os = "android")]
             if scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some() {
-                let data = unsafe {
-                    android_data = align_to_32(android_data);
-                    std::slice::from_raw_parts::<f32>(
-                        android_data.as_ptr() as _,
-                        android_data.len() / 4,
-                    )
-                };
-                send_f32(data, &mut encoder, &sp);
+                with_aligned_f32(&android_data, |data| {
+                    send_f32(data, &mut encoder, &sp)
+                });
             } else {
                 hbb_common::sleep(0.1).await;
             }
