@@ -55,6 +55,15 @@ pub type NotifyMessageBox = fn(String, String, String, String) -> dyn Future<Out
 // the executable name of the portable version
 pub const PORTABLE_APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 
+#[inline]
+fn incoming_only_app_name() -> &'static str {
+    if option_env!("RUSTDESK_INCOMING_ONLY").is_some() {
+        "RustDeskHost"
+    } else {
+        "RustDesk"
+    }
+}
+
 pub const PLATFORM_WINDOWS: &str = "Windows";
 pub const PLATFORM_LINUX: &str = "Linux";
 pub const PLATFORM_MACOS: &str = "Mac OS";
@@ -122,6 +131,9 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    if option_env!("RUSTDESK_INCOMING_ONLY").is_some() {
+        *config::APP_NAME.write().unwrap() = incoming_only_app_name().to_owned();
+    }
     #[cfg(target_os = "linux")]
     {
         if !crate::platform::linux::is_x11() {
@@ -2654,6 +2666,16 @@ mod tests {
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
     use std::collections::HashSet;
+
+    #[test]
+    fn incoming_only_build_uses_isolated_app_name() {
+        let expected = if option_env!("RUSTDESK_INCOMING_ONLY").is_some() {
+            "RustDeskHost"
+        } else {
+            "RustDesk"
+        };
+        assert_eq!(incoming_only_app_name(), expected);
+    }
 
     #[inline]
     fn get_timestamp_secs() -> u128 {

@@ -911,6 +911,9 @@ jobs:
   build-rustdesk-android:
     needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
+    env:
+      # This custom Android build is controller-only; Windows keeps its own build mode.
+      RUSTDESK_OUTGOING_ONLY: "1"
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
