@@ -816,6 +816,17 @@ jobs:
           fi
           ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
 
+      - name: Seal macOS ARM app after service copy
+        if: matrix.job.arch == 'aarch64'
+        run: |
+          APP="./flutter/build/macos/Build/Products/Release/RustDesk.app"
+          # build.py copies the service binary after Flutter/Xcode signs the app.
+          # Re-seal the bundle so unsigned/ad-hoc artifacts can launch without a
+          # Developer ID certificate. A later Developer ID step may replace this
+          # ad-hoc signature when signing secrets are available.
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
