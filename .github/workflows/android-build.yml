@@ -1,0 +1,24 @@
+name: Build Android only
+
+# Manual entry point: compiles just the apk(s) from the current branch, without
+# running the Windows / macOS / Linux jobs.
+#
+# It reuses flutter-build.yml with `targets: android`, which leaves only
+# validate-update-metadata-keys -> generate-bridge -> build-rustdesk-android
+# (plus the universal apk when upload-artifact is on) enabled.
+on:
+  workflow_dispatch:
+    inputs:
+      upload-artifact:
+        description: "Upload apk artifacts (also publishes them to the nightly pre-release)"
+        type: boolean
+        default: false
+
+jobs:
+  android:
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      targets: android
+      upload-artifact: ${{ inputs.upload-artifact }}
+      upload-tag: "nightly"

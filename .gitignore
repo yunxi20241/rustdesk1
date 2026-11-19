@@ -60,3 +60,12 @@ flutter/web/
 /third_party/libdrmtap/
 # Local git worktrees
 .worktrees/
+
+# Android release signing material - never commit
+*.jks
+*.keystore
+*.p12
+key.properties
+release.key
+release.crt
+release.b64
