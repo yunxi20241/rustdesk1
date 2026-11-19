@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package com.yunxi20241.rustdesk
 
 import android.content.Context
 import android.net.Uri
